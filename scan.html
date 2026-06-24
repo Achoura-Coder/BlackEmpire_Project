@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Black Empire — Scanner</title>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0f; color: #fff; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 1.5rem; }
+
+.header { text-align: center; margin-bottom: 2rem; }
+.header-tag { display:inline-block; font-size:11px; letter-spacing:.15em; text-transform:uppercase; color:#AFA9EC; background:rgba(174,169,236,.1); border:1px solid rgba(174,169,236,.25); border-radius:99px; padding:4px 14px; margin-bottom:.75rem; }
+.header h1 { font-size:24px; font-weight:700; }
+.header p { font-size:13px; color:rgba(255,255,255,.4); margin-top:4px; }
+
+.scanner-wrap { width:100%; max-width:380px; position:relative; border-radius:16px; overflow:hidden; background:#000; margin-bottom:1.5rem; }
+#video { width:100%; display:block; border-radius:16px; }
+.scan-overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+.scan-frame { width:200px; height:200px; border:2px solid rgba(127,119,221,.8); border-radius:12px; box-shadow: 0 0 0 9999px rgba(0,0,0,.45); }
+.scan-line { position:absolute; width:180px; height:2px; background:linear-gradient(90deg,transparent,#7F77DD,transparent); animation: scanline 2s linear infinite; }
+@keyframes scanline { 0%{top:calc(50% - 90px)} 100%{top:calc(50% + 90px)} }
+
+.btn-start { width:100%; max-width:380px; padding:14px; border-radius:12px; background:#534AB7; color:#fff; border:none; font-size:15px; font-weight:600; cursor:pointer; margin-bottom:1rem; }
+.btn-start:hover { background:#6059c8; }
+
+/* RESULT CARD */
+.result-card { width:100%; max-width:380px; border-radius:16px; padding:1.5rem; text-align:center; margin-bottom:1rem; display:none; }
+.result-card.valid   { background:rgba(99,153,34,.15); border:1px solid rgba(99,153,34,.5); }
+.result-card.used    { background:rgba(220,60,60,.12); border:1px solid rgba(220,60,60,.4); }
+.result-card.invalid { background:rgba(186,117,23,.12); border:1px solid rgba(186,117,23,.4); }
+
+.result-icon { font-size:48px; margin-bottom:.75rem; }
+.result-status { font-size:22px; font-weight:700; margin-bottom:.5rem; }
+.result-card.valid   .result-status { color:#8bc34a; }
+.result-card.used    .result-status { color:#e05555; }
+.result-card.invalid .result-status { color:#BA7517; }
+
+.result-details { font-size:13px; color:rgba(255,255,255,.7); line-height:2; text-align:left; background:rgba(255,255,255,.05); border-radius:10px; padding:.75rem 1rem; margin-top:.75rem; }
+.result-details strong { color:#fff; }
+
+.btn-next { width:100%; max-width:380px; padding:12px; border-radius:10px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.15); color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
+.btn-next:hover { background:rgba(255,255,255,.13); }
+
+.stats-bar { width:100%; max-width:380px; display:flex; gap:10px; margin-bottom:1.5rem; }
+.stat { flex:1; background:#131320; border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:.75rem; text-align:center; }
+.stat-num { font-size:24px; font-weight:700; color:#AFA9EC; }
+.stat-label { font-size:11px; color:rgba(255,255,255,.4); text-transform:uppercase; letter-spacing:.06em; margin-top:2px; }
+
+.spinner { display:inline-block; width:16px; height:16px; border:2px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; animation:spin .7s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+.hidden { display:none !important; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-tag">Staff Only</div>
+  <h1>🚢 Black Empire</h1>
+  <p>Boarding Scanner · 04 July 2025</p>
+</div>
+
+<!-- STATS -->
+<div class="stats-bar">
+  <div class="stat"><div class="stat-num" id="stat-scanned">0</div><div class="stat-label">Scanned</div></div>
+  <div class="stat"><div class="stat-num" id="stat-valid">0</div><div class="stat-label">Valid</div></div>
+  <div class="stat"><div class="stat-num" id="stat-invalid">0</div><div class="stat-label">Rejected</div></div>
+</div>
+
+<!-- CAMERA -->
+<div class="scanner-wrap hidden" id="scanner-wrap">
+  <video id="video" autoplay playsinline muted></video>
+  <div class="scan-overlay">
+    <div class="scan-frame"></div>
+    <div class="scan-line"></div>
+  </div>
+</div>
+<canvas id="canvas" style="display:none;"></canvas>
+
+<button class="btn-start" id="btn-start" onclick="startScanner()">📷 Start scanning</button>
+
+<!-- RESULT -->
+<div class="result-card" id="result-card">
+  <div class="result-icon" id="result-icon"></div>
+  <div class="result-status" id="result-status"></div>
+  <div class="result-details" id="result-details"></div>
+</div>
+
+<button class="btn-next hidden" id="btn-next" onclick="nextScan()">Scan next ticket →</button>
+
+<script>
+const CONFIG = {
+  supabase_url: 'https://ucpjnyefutiikafirqyq.supabase.co',
+  supabase_key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVjcGpueWVmdXRpaWthZmlycXlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzMDgxMTEsImV4cCI6MjA5Nzg4NDExMX0.g0H2gJVcWmoBm3VzE7BKlwjVglgHMAYkjI7N8QUuMXE',
+};
+
+let stream = null;
+let scanning = false;
+let stats = { scanned:0, valid:0, invalid:0 };
+
+function updateStats() {
+  document.getElementById('stat-scanned').textContent = stats.scanned;
+  document.getElementById('stat-valid').textContent   = stats.valid;
+  document.getElementById('stat-invalid').textContent = stats.invalid;
+}
+
+async function startScanner() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    const video = document.getElementById('video');
+    video.srcObject = stream;
+    await video.play();
+    document.getElementById('scanner-wrap').classList.remove('hidden');
+    document.getElementById('btn-start').textContent = '⏳ Scanning…';
+    document.getElementById('btn-start').disabled = true;
+    document.getElementById('result-card').style.display = 'none';
+    document.getElementById('btn-next').classList.add('hidden');
+    scanning = true;
+    requestAnimationFrame(scanFrame);
+  } catch(e) {
+    alert('Camera access denied. Please allow camera access and try again.');
+  }
+}
+
+function scanFrame() {
+  if(!scanning) return;
+  const video  = document.getElementById('video');
+  const canvas = document.getElementById('canvas');
+  if(video.readyState === video.HAVE_ENOUGH_DATA) {
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
+    if(code && code.data.startsWith('BE-')) {
+      scanning = false;
+      processQR(code.data);
+      return;
+    }
+  }
+  requestAnimationFrame(scanFrame);
+}
+
+async function processQR(ref) {
+  document.getElementById('btn-start').textContent = '⏳ Checking…';
+  stats.scanned++;
+  updateStats();
+
+  try {
+    // Fetch booking from Supabase
+    const res = await fetch(
+      CONFIG.supabase_url + '/rest/v1/bookings?ref=eq.' + encodeURIComponent(ref) + '&select=*',
+      { headers: { 'apikey': CONFIG.supabase_key, 'Authorization': 'Bearer ' + CONFIG.supabase_key } }
+    );
+    const data = await res.json();
+
+    const card = document.getElementById('result-card');
+    card.className = 'result-card';
+    card.style.display = 'block';
+
+    if(!data || data.length === 0) {
+      // Unknown ref
+      card.classList.add('invalid');
+      document.getElementById('result-icon').textContent = '⚠️';
+      document.getElementById('result-status').textContent = 'Invalid Ticket';
+      document.getElementById('result-details').innerHTML = '<strong>Ref:</strong> ' + ref + '<br>This ticket was not found in the system.';
+      stats.invalid++; updateStats();
+
+    } else {
+      const booking = data[0];
+      if(booking.status === 'used') {
+        card.classList.add('used');
+        document.getElementById('result-icon').textContent = '❌';
+        document.getElementById('result-status').textContent = 'Already Scanned';
+        document.getElementById('result-details').innerHTML =
+          '<strong>Name:</strong> ' + booking.name + '<br>' +
+          '<strong>Ref:</strong> ' + booking.ref + '<br>' +
+          '<strong>Tickets:</strong> ' + booking.tickets + '<br>' +
+          '<strong>Scanned at:</strong> ' + new Date(booking.scanned_at).toLocaleTimeString();
+        stats.invalid++; updateStats();
+
+      } else {
+        // Mark as used
+        await fetch(
+          CONFIG.supabase_url + '/rest/v1/bookings?ref=eq.' + encodeURIComponent(ref),
+          {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': CONFIG.supabase_key,
+              'Authorization': 'Bearer ' + CONFIG.supabase_key,
+            },
+            body: JSON.stringify({ status: 'used', scanned_at: new Date().toISOString() })
+          }
+        );
+        card.classList.add('valid');
+        document.getElementById('result-icon').textContent = '✅';
+        document.getElementById('result-status').textContent = 'Welcome on board!';
+        document.getElementById('result-details').innerHTML =
+          '<strong>Name:</strong> ' + booking.name + '<br>' +
+          '<strong>Ref:</strong> ' + booking.ref + '<br>' +
+          '<strong>Tickets:</strong> ' + booking.tickets + '<br>' +
+          '<strong>Payment:</strong> ' + booking.payment_method +
+          (booking.after_party ? '<br>🎉 After Party: Fox Club' : '');
+        stats.valid++; updateStats();
+
+        // Vibrate on success (mobile)
+        if(navigator.vibrate) navigator.vibrate([100, 50, 100]);
+      }
+    }
+  } catch(e) {
+    console.error(e);
+    const card = document.getElementById('result-card');
+    card.className = 'result-card invalid';
+    card.style.display = 'block';
+    document.getElementById('result-icon').textContent = '⚠️';
+    document.getElementById('result-status').textContent = 'Connection Error';
+    document.getElementById('result-details').innerHTML = 'Could not verify ticket. Check your internet connection.';
+    stats.invalid++; updateStats();
+  }
+
+  document.getElementById('btn-next').classList.remove('hidden');
+  document.getElementById('btn-start').textContent = '📷 Start scanning';
+  document.getElementById('btn-start').disabled = false;
+}
+
+function nextScan() {
+  document.getElementById('result-card').style.display = 'none';
+  document.getElementById('btn-next').classList.add('hidden');
+  scanning = true;
+  requestAnimationFrame(scanFrame);
+  document.getElementById('btn-start').textContent = '⏳ Scanning…';
+  document.getElementById('btn-start').disabled = true;
+}
+</script>
+</body>
+</html>
