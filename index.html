@@ -360,8 +360,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 const CONFIG = {
   supabase_url:  'https://ucpjnyefutiikafirqyq.supabase.co',
   supabase_key:  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVjcGpueWVmdXRpaWthZmlycXlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzMDgxMTEsImV4cCI6MjA5Nzg4NDExMX0.g0H2gJVcWmoBm3VzE7BKlwjVglgHMAYkjI7N8QUuMXE',
-  formspree_id:  'mvzjzbzl',
-  whatsapp:      '905XXXXXXXXX',  // ← Remplace par ton vrai numéro
+  whatsapp:      '905360135704',
 };
 
 const prices = { normal:1500, vip:2000, table:10000 };
@@ -469,29 +468,6 @@ async function saveToSupabase(booking) {
   if(!res.ok) throw new Error('Supabase error: ' + res.status);
 }
 
-async function sendConfirmationEmail(data) {
-  const res = await fetch('https://formspree.io/f/' + CONFIG.formspree_id, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-    body: JSON.stringify({
-      _replyto:        data.email,
-      _subject:        '🚢 Black Empire — Your QR Ticket | ' + data.ref,
-      name:            data.name,
-      email:           data.email,
-      phone:           data.phone,
-      booking_ref:     data.ref,
-      tickets:         data.tickets,
-      total:           data.totalStr,
-      payment_method:  data.methodLabel,
-      after_party:     data.after ? 'Yes — Fox Club 02:00' : 'No',
-      event:           'Black Empire · 04 July 2025 · Kabataş Yacht Port',
-      dress_code:      'All White',
-      qr_content:      data.ref,
-      message:         'Your booking reference is: ' + data.ref + '. Please screenshot or save your QR code from the booking page. Present it at boarding on July 4th.',
-    })
-  });
-  if(!res.ok) throw new Error('Formspree error');
-}
 
 async function submitBooking() {
   if(!validate()) return;
