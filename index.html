@@ -358,8 +358,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 // ⚙️  CONFIGURATION
 // ═══════════════════════════════════════════
 const CONFIG = {
-  supabase_url:  'https://ucpjnyefutiikafirqyq.supabase.co',
-  supabase_key:  'sb_publishable_P46aWrYEuwnzTss7xNey1A_DC7lP86L',
+  google_script: 'https://script.google.com/macros/s/AKfycbw0TsUv_zR42tPuFbtb73MT4doIgHsQh8X7L5Sg-H1gE5pHaKs-jFUzOjmPBq74ljfV/exec',
   whatsapp:      '905360135704',
 };
 
@@ -454,18 +453,13 @@ function validate() {
   return ok;
 }
 
-async function saveToSupabase(booking) {
-  const res = await fetch(CONFIG.supabase_url + '/rest/v1/bookings', {
+async function saveBooking(booking) {
+  const res = await fetch(CONFIG.google_script, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'apikey': CONFIG.supabase_key,
-      'Authorization': 'Bearer ' + CONFIG.supabase_key,
-      'Prefer': 'return=minimal'
-    },
     body: JSON.stringify(booking)
   });
-  if(!res.ok) throw new Error('Supabase error: ' + res.status);
+  const data = await res.json();
+  if(data.status !== 'ok') throw new Error('Google Script error');
 }
 
 
@@ -485,8 +479,8 @@ async function submitBooking() {
   showStep('loading');
 
   try {
-    // 1. Save to Supabase
-    await saveToSupabase({
+    // 1. Save to Google Sheets
+    await saveBooking({
       ref,
       name,
       email,
